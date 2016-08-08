@@ -8,6 +8,8 @@
 int** basis_uncoupled(int,int);
 int** basis_coupled(int,int);
 void basis_print(int**,int);
+void compute_densityMatrix(arma::mat&,int,arma::mat&);
+void solve_iterations(arma::mat&,matrix4D<double>&,int,arma::vec&,arma::mat&,arma::vec&);
 bool triangle_rule(int,int,int);
 int factorial(int);
 int factorial_half(int);
@@ -21,11 +23,15 @@ void V_uncoupled_from_coupled(matrix4D<double>&,arma::mat&,int,matrix4D<double>&
 void CG_coeff(arma::mat&,arma::mat&,int,arma::mat&);
 void H_uncoupled_from_coupled(arma::mat&,arma::mat&,int,arma::mat&);
 
+#define TOLERANCE 1e-8
+#define maxITERATIONS 30
+
 int main(int argc, char* argv[]){
 	int a, b, c, d,
 		i, j, k, l,
 		A, B, C, D,
-		I, J, K, L, 
+		I, J, K, L,
+		CGI, CGJ, CGK, CGIJ, CGIJK,
 		tz, size;
 	double energy, V, time;
 	char* spinfile, *tbinfile;
@@ -47,83 +53,69 @@ int main(int argc, char* argv[]){
 				cgcoeff = arma::zeros<arma::mat>(size,size),
 				H_unc = cgcoeff,
 				H_c = H_unc,
+				H = H_c,
 				C_ = arma::eye<arma::mat>(size,size);
 	arma::vec	unc_n_mask = arma::zeros<arma::vec>(size),
 				unc_p_mask = unc_n_mask,
 				c_n_mask = unc_p_mask,
 				c_p_mask = c_n_mask,
-				spE = arma::zeros<arma::vec>(size),
-				E = spE;
+				E = arma::zeros<arma::vec>(size);
 	matrix4D<double> 	V_c(80,80,80,80,0.0),
 						V_unc(80,80,80,80,0.0);
 	
 	extract_from_spfile(spinfile,c_states);
 	extract_from_tbfile(tbinfile,V_c);
 	sp_energies(c_states,tz,H_c);
-	states_uncoupled_from_coupled(unc_states,c_states);
+	states_uncoupled_from_coupled(c_states,unc_states);
+	CG_coeff(c_states,unc_states,tz,cgcoeff);
+	H_uncoupled_from_coupled(H_c,cgcoeff,tz,H_unc);
 
-/*
-	if(fabs(tz)==1){
-		create_mask(c_states,tz,c_n_mask);
-		create_mask(unc_states,tz,unc_n_mask);
-		for(a=0;a<size;a++){
-			A = unc_n_mask(a);
-			for(b=0;b<size;b++){
-				B = unc_n_mask(b);
-				for(c=0;c<size;c++){
-					C = unc_n_mask(c);
-					for(d=0;d<size;d++){
-						D = unc_n_mask(d);
-						V = 0.0;
 	start = clock();
-						for(i=0;i<size;i++){
-							I = c_n_mask(i);
+	for(a=0;a<size;a++){
+		for(b=0;b<size;b++){
+			for(c=0;c<size;c++){
+				for(d=0;d<size;d++){
+					V = 0.0;
+					for(i=0;i<size;i++){
+						CGI = cgcoeff(i,a);
+						if(CGI!=0){
 							for(j=0;j<size;j++){
-								J = c_n_mask(j);
-								for(k=0;k<size;k++){
-									K = c_n_mask(k);
-									for(l=0;l<size;l++){
-										L = c_n_mask(l);
-										V += cgcoeff(i,a)*cgcoeff(j,b)*cgcoeff(k,c)*cgcoeff(l,d)*V_c.memory[I][J][K][L];
+								CGJ = cgcoeff(j,b);
+								if(CGJ!=0){
+									CGIJ = CGI*CGJ;
+									for(k=0;k<size;k++){
+										CGK = cgcoeff(k,c);
+										if(CGK!=0){
+											CGIJK = CGIJ*CGK;
+											for(l=0;l<size;l++){
+												V += CGIJK*cgcoeff(l,d)*V_c.memory[i][j][k][l];
+											}
+										}
 									}
 								}
 							}
 						}
-						V_unc.memory[A][B][C][D] = V;
+					}
+					V_unc.memory[a][b][c][d] = V;
+				}
+			}
+		}
+	}
 	finish = clock();
 	time = (finish - start)/(double) CLOCKS_PER_SEC;
 	std::cout << time << " seconds" << std::endl;
-					}
-				}
-			}
-		}
-	}
-	else if(tz==0){
-		for(a=0;a<size;a++){
-			for(b=0;b<size;c++){
-				for(c=0;c<size;c++){
-					for(d=0;d<size;d++){
-						V = 0.0;
-						for(i=0;i<size;i++){
-							for(j=0;j<size;j++){
-								for(k=0;k<size;k++){
-									for(l=0;l<size;l++){
-										V += cgcoeff(i,a)*cgcoeff(j,b)*cgcoeff(k,c)*cgcoeff(l,d)*V_c.memory[i][j][k][l];
-									}
-								}
-							}
-						}
-						V_unc.memory[a][b][c][d] = V;
-					}
-				}
-			}
-		}
-	}
-*/
 
-	CG_coeff(c_states,unc_states,tz,cgcoeff);
-	H_uncoupled_from_coupled(H_c,cgcoeff,tz,H_unc);
-	arma::eig_sym(E,C_,H_unc);
+	create_mask(unc_states,tz,unc_n_mask);
+	create_mask(c_states,tz,c_n_mask);
+	solve_iterations(H_c,V_unc,tz,unc_n_mask,H,E);
+
+	for(i=0;i<size;i++){
+		std::cout << std::setw(10) << E(i);
+		if((i+1)%10==0){
+			std::cout << std::endl;
+		}
+	}
+	std::cout << std::endl;
 
 	return 0;
 }
@@ -189,6 +181,100 @@ void basis_print(int**memory, int size){
 	}
 }
 
+void compute_densityMatrix(arma::mat& C, int size, arma::mat& densityMatrix){
+	int i, j, k, part;
+	double rho;	
+	part = size/5;
+//	arma::mat C_dagger = arma::trans(C);
+	for(i=0;i<size;i++){
+		for(j=0;j<size;j++){
+			rho = 0;
+			for(k=0;k<part;k++){
+				rho += C(i,k)*C(j,k);
+			}
+			densityMatrix(i,j) = rho;
+		}
+	}
+}
+void solve_iterations(arma::mat& H0, matrix4D<double>& V, int tz, arma::vec& mask, arma::mat& H, arma::vec& E){	
+	//Run solver for tz==+-1 or 0
+	//Note only the n/p only case uses the mask
+	//There is no need for it in the total case
+	int i, j, k, l,
+		I, J, K, L,
+		iterations = 0,
+		size = 80 - fabs(tz)*40;
+	double energy, time;
+
+	arma::mat 	C = arma::eye<arma::mat>(size,size),
+				densityMatrix = C;
+	arma::vec	prevE = arma::zeros<arma::vec>(size),
+				diff = arma::ones<arma::vec>(size);
+	
+	clock_t start, finish;
+	start = clock();
+	if(abs(tz)==1){		
+		while(iterations < maxITERATIONS){
+			H = arma::zeros<arma::mat>(size,size);
+			compute_densityMatrix(C,size,densityMatrix);
+			for(i=0;i<size;i++){
+				I = mask(i);
+				for(j=i;j<size;j++){
+					J = mask(j);
+					energy = 0;
+					for(k=0;k<size;k++){
+						K = mask(k);
+						for(l=0;l<size;l++){
+							L = mask(l);
+							energy += densityMatrix(k,l)*V.memory[I][K][J][L];
+						}
+					}
+					H(i,j) = H(j,i) = energy + H0(i,j);
+				}
+			}
+			arma::eig_sym(E,C,H);
+			diff = prevE - E;
+			prevE = E;
+			iterations++;
+			if(fabs(diff.max()) < TOLERANCE){
+				break;
+			}
+		}
+	}
+	else if(tz==0){
+		while(iterations < maxITERATIONS){
+			H = arma::zeros<arma::mat>(size,size);
+			diff = arma::zeros<arma::vec>(size);
+			compute_densityMatrix(C,size,densityMatrix);
+			for(i=0;i<size;i++){
+				for(j=i;j<size;j++){
+					energy = 0;
+					for(k=0;k<size;k++){
+						for(l=0;l<size;l++){
+							energy += densityMatrix(k,l)*V.memory[i][k][j][l];
+						}
+					}
+					H(i,j) = H(j,i) = energy + H0(i,j);
+				}
+			}
+			arma::eig_sym(E,C,H);
+			diff = prevE - E;
+			prevE = E;
+			iterations++;
+			if(fabs(diff.max()) < TOLERANCE){
+				break;
+			}
+		}
+	}
+	finish = clock();
+	time = (finish - start)/(double) CLOCKS_PER_SEC;
+	std::cout << std::endl;
+	std::cout << "Convergence in " << time << " seconds after " << iterations;
+	std::cout << " iterations with " << fabs(diff.max()) << " < " << TOLERANCE << std::endl;
+	std::cout << std::endl;
+	
+	E = arma::sort(E);
+}
 bool triangle_rule(int j1, int j2, int j3){
 	bool test = true;
 	if((j1+j2+j3)%2==1){
@@ -330,7 +416,7 @@ void sp_energies(arma::mat& input, int tz, arma::mat& H0){
 		exit(1);
 	}
 }
-void states_uncoupled_from_coupled(arma::mat& uncoupled, arma::mat& coupled){
+void states_uncoupled_from_coupled(arma::mat& coupled, arma::mat& uncoupled){
 	int i, j2, marker=0, prevj2=-1, tz = 1;
 
 	for(i=0;i<80;i++){
@@ -364,7 +450,7 @@ void create_mask(arma::mat& states, int tz, arma::vec& mask){
 			j++;
 		}
 	}
-}
+}	
 void CG_coeff(arma::mat& c_states ,arma::mat& unc_states, int tz, arma::mat& cgcoeff){
 	int i, k, nc, nunc, jc, junc,
 		I, K,
