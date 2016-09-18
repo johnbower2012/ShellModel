@@ -1,0 +1,3 @@
+In this folder one may find code relating to the lipkin model. In the subfolder is the old project from Nuclear Structure for comparison.
+
+Currently there is much code related to building state sets, for memory allocation, counting, etc, but the file itself, lipkin.cpp, has problems. Whether I simply need to isolate specific states or the project model was too simplistic, I am unsure, since the number of states do not much up. A thought is to combine all states with like Jm values, add a weighting factor, and go from there.
