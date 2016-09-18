@@ -294,7 +294,7 @@ int stateset::zedangmom(int a){
 	return zproj;
 }
 /***************************************
-	Return maximum zprojection of
+	Return minimum zprojection of
 	angular momentum
 ***************************************/
 int stateset::zedang_min(){
@@ -308,15 +308,15 @@ int stateset::zedang_min(){
 	return min;
 }
 /***************************************
-	Return minimum zprojection of
+	Return maximum zprojection of
 	angular momentum
 ***************************************/
-int stateset::zedang_max(int count, int* list){
+int stateset::zedang_max(){
 	int i,max;
-	max = zedangmom(list[0]);
-	for(i=0;i<count;i++){
-		if(max<zedangmom(list[i])){
-			max = zedangmom(list[i]);
+	max = zedangmom(0);
+	for(i=0;i<mpstates;i++){
+		if(max<zedangmom(i)){
+			max = zedangmom(i);
 		}
 	}
 	return max;
@@ -341,12 +341,12 @@ int stateset::zedang_min(int count, int* list){
 	angular momentum from states in 
 	list
 ***************************************/
-int stateset::zedang_max(){
+int stateset::zedang_max(int count, int* list){
 	int i,max;
-	max = zedangmom(0);
-	for(i=0;i<mpstates;i++){
-		if(max<zedangmom(i)){
-			max = zedangmom(i);
+	max = zedangmom(list[0]);
+	for(i=0;i<count;i++){
+		if(max<zedangmom(list[i])){
+			max = zedangmom(list[i]);
 		}
 	}
 	return max;
@@ -384,11 +384,11 @@ int* stateset::zedang_loc(int a, int count){
 }
 
 
-/***************************************
+/*************************************************
 
 		OPERATORS CLASS DEFINITIONS
 
-***************************************/
+*************************************************/
 
 /***************************************
 	Null constructor
@@ -474,7 +474,7 @@ void operators::annihilate(int j){
 	}
 }
 /***************************************
-	Annihilate space j
+	Create space j
 	Test for empty space
 		--if false, set true & 
 			calculate phase
